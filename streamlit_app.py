@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════
-# 🌐 피부암 분류 AI - Streamlit Cloud 배포용
+# 🌐 피부암 분류 AI - Streamlit Cloud 배포용 (다운로드 수정)
 # ═══════════════════════════════════════════════════════════
 
 import streamlit as st
@@ -9,6 +9,8 @@ import numpy as np
 import pandas as pd
 import os
 import gdown
+import requests
+from pathlib import Path
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 페이지 설정
@@ -22,40 +24,103 @@ st.set_page_config(
 )
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Google Drive에서 모델 다운로드
+# Google Drive에서 모델 다운로드 (개선된 버전)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def download_file_from_google_drive(file_id, destination):
+    """Google Drive에서 파일 다운로드 (requests 사용)"""
+    
+    # Google Drive 다운로드 URL
+    URL = "https://drive.google.com/uc?export=download"
+    
+    session = requests.Session()
+    
+    response = session.get(URL, params={'id': file_id}, stream=True)
+    token = None
+    
+    # 바이러스 스캔 경고 처리
+    for key, value in response.cookies.items():
+        if key.startswith('download_warning'):
+            token = value
+            break
+    
+    if token:
+        params = {'id': file_id, 'confirm': token}
+        response = session.get(URL, params=params, stream=True)
+    
+    # 파일 저장
+    CHUNK_SIZE = 32768
+    with open(destination, "wb") as f:
+        for chunk in response.iter_content(CHUNK_SIZE):
+            if chunk:
+                f.write(chunk)
+    
+    return destination
 
 @st.cache_resource
 def download_model_from_gdrive():
     """Google Drive에서 모델 다운로드 (최초 1회만)"""
     
-    model_path = 'final_model_resnet50.keras'
+    # 절대 경로 사용
+    model_dir = Path('/tmp')
+    model_path = model_dir / 'final_model_resnet50.keras'
     
     # 이미 존재하면 스킵
-    if os.path.exists(model_path):
-        return model_path
+    if model_path.exists():
+        file_size = model_path.stat().st_size / (1024 * 1024)  # MB
+        st.info(f'✅ 캐시된 모델 사용: {file_size:.1f} MB')
+        return str(model_path)
     
-    # ⭐ Google Drive 파일 ID (여기에 입력!)
-    # 링크: https://drive.google.com/file/d/YOUR_FILE_ID/view?usp=sharing
-    gdrive_file_id = '13RsivlToes33FwGINH-CATCPT9lUbudL'  # ← 여기 수정!
+    # Google Drive 파일 ID
+    gdrive_file_id = '13RsivlToes33FwGINH-CATCPT9lUbudL'
     
-    gdrive_url = f'https://drive.google.com/uc?id={gdrive_file_id}'
-    
-    # 다운로드
-    with st.spinner('🔄 AI 모델 다운로드 중... (최초 1회, 약 1분 소요)'):
+    # 다운로드 시도
+    with st.spinner('🔄 AI 모델 다운로드 중... (최초 1회, 약 1-2분 소요)'):
         try:
-            gdown.download(gdrive_url, model_path, quiet=False)
-            st.success('✅ 모델 준비 완료!')
-        except Exception as e:
-            st.error(f'❌ 모델 다운로드 실패: {e}')
-            st.info("""
-            **해결 방법:**
-            1. Google Drive 링크가 "링크가 있는 모든 사용자"로 공유되어 있는지 확인
-            2. 파일 ID가 올바른지 확인
-            """)
-            st.stop()
+            # 방법 1: requests 직접 다운로드 (추천)
+            st.info('📥 다운로드 시작...')
+            download_file_from_google_drive(gdrive_file_id, str(model_path))
+            
+            # 다운로드 확인
+            if not model_path.exists():
+                raise FileNotFoundError(f"다운로드 실패: {model_path}")
+            
+            file_size = model_path.stat().st_size / (1024 * 1024)  # MB
+            
+            # 파일 크기 확인 (너무 작으면 에러 페이지 다운받은 것)
+            if file_size < 10:
+                raise ValueError(f"파일 크기가 너무 작습니다: {file_size:.1f} MB")
+            
+            st.success(f'✅ 모델 다운로드 완료! ({file_size:.1f} MB)')
+            
+        except Exception as e1:
+            st.warning(f'⚠️ requests 다운로드 실패: {e1}')
+            st.info('🔄 gdown으로 재시도...')
+            
+            try:
+                # 방법 2: gdown fallback
+                gdrive_url = f'https://drive.google.com/uc?id={gdrive_file_id}'
+                gdown.download(gdrive_url, str(model_path), quiet=False, fuzzy=True)
+                
+                if not model_path.exists():
+                    raise FileNotFoundError("gdown 다운로드 실패")
+                
+                file_size = model_path.stat().st_size / (1024 * 1024)
+                st.success(f'✅ 모델 다운로드 완료! ({file_size:.1f} MB)')
+                
+            except Exception as e2:
+                st.error(f'❌ 모든 다운로드 방법 실패')
+                st.error(f'Error 1 (requests): {e1}')
+                st.error(f'Error 2 (gdown): {e2}')
+                st.info("""
+                **해결 방법:**
+                1. Google Drive 링크 확인: https://drive.google.com/file/d/13RsivlToes33FwGINH-CATCPT9lUbudL/view
+                2. 공유 설정: "링크가 있는 모든 사용자"
+                3. 잠시 후 페이지 새로고침 (F5)
+                """)
+                st.stop()
     
-    return model_path
+    return str(model_path)
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 모델 로드
@@ -67,7 +132,9 @@ def load_model():
     model_path = download_model_from_gdrive()
     
     try:
+        st.info(f'📂 모델 로드 중: {model_path}')
         model = tf.keras.models.load_model(model_path)
+        st.success('✅ 모델 로드 성공!')
         return model
     except Exception as e:
         st.error(f"❌ 모델 로드 실패: {e}")
@@ -256,9 +323,8 @@ elif page == "🩺 AI 예측":
     # 모델 로드
     try:
         model = load_model()
-        st.success("✅ 모델 로드 완료!")
     except Exception as e:
-        st.error(f"❌ 모델 로드 실패")
+        st.error(f"❌ 모델 로드 중 오류 발생")
         st.stop()
     
     st.markdown("---")
@@ -299,7 +365,7 @@ elif page == "🩺 AI 예측":
                 st.image(image, caption=f"샘플 {idx+1}", use_container_width=True)
                 
                 # 임시 파일로 저장
-                temp_path = f"temp_{idx}.jpg"
+                temp_path = f"/tmp/temp_{idx}.jpg"
                 with open(temp_path, "wb") as f:
                     f.write(uploaded_file.getbuffer())
                 
@@ -351,7 +417,7 @@ elif page == "🩺 AI 예측":
         total = len(uploaded_files)
         
         for idx, uploaded_file in enumerate(uploaded_files):
-            temp_path = f"temp_{idx}.jpg"
+            temp_path = f"/tmp/temp_{idx}.jpg"
             preprocessed = preprocess_image(temp_path)
             prediction = model.predict(
                 np.expand_dims(preprocessed, axis=0),
@@ -396,7 +462,7 @@ elif page == "🩺 AI 예측":
         results_data = []
         
         for idx, uploaded_file in enumerate(uploaded_files):
-            temp_path = f"temp_{idx}.jpg"
+            temp_path = f"/tmp/temp_{idx}.jpg"
             preprocessed = preprocess_image(temp_path)
             prediction = model.predict(
                 np.expand_dims(preprocessed, axis=0),
