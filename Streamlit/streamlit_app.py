@@ -1,15 +1,14 @@
 # ═══════════════════════════════════════════════════════════
-# 🌐 Streamlit 대시보드 - 피부암 분류
-# 양성/악성 병변 예측
+# 🌐 피부암 분류 AI - Streamlit Cloud 배포용
 # ═══════════════════════════════════════════════════════════
 
 import streamlit as st
 import tensorflow as tf
 import cv2
 import numpy as np
-from pathlib import Path
 import pandas as pd
 import os
+import gdown
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 페이지 설정
@@ -23,6 +22,58 @@ st.set_page_config(
 )
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Google Drive에서 모델 다운로드
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@st.cache_resource
+def download_model_from_gdrive():
+    """Google Drive에서 모델 다운로드 (최초 1회만)"""
+    
+    model_path = 'final_model_resnet50.keras'
+    
+    # 이미 존재하면 스킵
+    if os.path.exists(model_path):
+        return model_path
+    
+    # ⭐ Google Drive 파일 ID (여기에 입력!)
+    # 링크: https://drive.google.com/file/d/YOUR_FILE_ID/view?usp=sharing
+    gdrive_file_id = '13RsivlToes33FwGINH-CATCPT9lUbudL'  # ← 여기 수정!
+    
+    gdrive_url = f'https://drive.google.com/uc?id={gdrive_file_id}'
+    
+    # 다운로드
+    with st.spinner('🔄 AI 모델 다운로드 중... (최초 1회, 약 1분 소요)'):
+        try:
+            gdown.download(gdrive_url, model_path, quiet=False)
+            st.success('✅ 모델 준비 완료!')
+        except Exception as e:
+            st.error(f'❌ 모델 다운로드 실패: {e}')
+            st.info("""
+            **해결 방법:**
+            1. Google Drive 링크가 "링크가 있는 모든 사용자"로 공유되어 있는지 확인
+            2. 파일 ID가 올바른지 확인
+            """)
+            st.stop()
+    
+    return model_path
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 모델 로드
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@st.cache_resource
+def load_model():
+    """모델 로드"""
+    model_path = download_model_from_gdrive()
+    
+    try:
+        model = tf.keras.models.load_model(model_path)
+        return model
+    except Exception as e:
+        st.error(f"❌ 모델 로드 실패: {e}")
+        st.stop()
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 전처리 함수
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -32,7 +83,6 @@ def preprocess_image(img_path, img_size=224):
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     img = cv2.resize(img, (img_size, img_size), interpolation=cv2.INTER_AREA)
     
-    # ImageNet 정규화
     MEAN = np.array([123.675, 116.28, 103.53], dtype=np.float32)
     STD = np.array([58.395, 57.12, 57.375], dtype=np.float32)
     
@@ -43,55 +93,12 @@ def preprocess_image(img_path, img_size=224):
     return img
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 모델 로드
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-@st.cache_resource
-def load_model():
-    """모델 로드 (경로 자동 탐색)"""
-    current_dir = os.getcwd()
-    
-    # 가능한 경로들
-    possible_paths = [
-        'final_model_resnet50.keras',
-        './final_model_resnet50.keras',
-        os.path.join(current_dir, 'final_model_resnet50.keras'),
-    ]
-    
-    # 파일 찾기
-    model_path = None
-    for path in possible_paths:
-        if os.path.exists(path):
-            model_path = path
-            break
-    
-    if model_path is None:
-        st.error(f"❌ 모델 파일을 찾을 수 없습니다!")
-        st.info(f"**현재 디렉토리:** `{current_dir}`")
-        st.info("**파일 목록:**")
-        st.code("\n".join(os.listdir(current_dir)))
-        st.warning("""
-        **해결 방법:**
-        1. `final_model_resnet50.keras` 파일을 현재 디렉토리에 복사하세요
-        2. Streamlit을 재실행하세요: `streamlit run streamlit_app.py`
-        """)
-        st.stop()
-    
-    try:
-        model = tf.keras.models.load_model(model_path)
-        return model
-    except Exception as e:
-        st.error(f"❌ 모델 로드 실패: {e}")
-        st.stop()
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 사이드바
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 st.sidebar.title("🔬 피부암 분류 AI")
 st.sidebar.markdown("---")
 
-# 페이지 선택 (드롭다운)
 page = st.sidebar.selectbox(
     "📂 메뉴",
     ["📖 서비스 소개", "🩺 AI 예측"],
@@ -206,65 +213,20 @@ if page == "📖 서비스 소개":
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric(
-            label="Accuracy",
-            value="77.62%",
-            delta="목표 70% 달성"
-        )
+        st.metric("Accuracy", "77.62%", delta="목표 70% 달성")
     
     with col2:
-        st.metric(
-            label="Recall",
-            value="81.84%",
-            delta="악성 검출력 높음"
-        )
+        st.metric("Recall", "81.84%", delta="악성 검출력 높음")
     
     with col3:
-        st.metric(
-            label="Precision",
-            value="75.47%",
-            delta="양성 정확도"
-        )
+        st.metric("Precision", "75.47%", delta="양성 정확도")
     
     with col4:
-        st.metric(
-            label="AUC",
-            value="0.8585",
-            delta="우수한 분류 성능"
-        )
-    
-    st.markdown("---")
-    
-    # 데이터셋
-    st.header("📚 데이터셋")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("""
-        ### HAM10000
-        
-        - **출처:** Human Against Machine with 10000 training images
-        - **총 이미지:** 10,015장
-        - **클래스:** 7개 (양성 4개, 악성 3개)
-        - **촬영 방법:** 피부경(dermatoscope)
-        """)
-    
-    with col2:
-        st.markdown("""
-        ### 사용 데이터
-        
-        - **학습 데이터:** 3,126장 (80%)
-        - **검증 데이터:** 782장 (20%)
-        - **균형 샘플링:** Benign 1,954 vs Malignant 1,954
-        - **총 샘플:** 3,908장
-        """)
+        st.metric("AUC", "0.8585", delta="우수한 분류 성능")
     
     st.markdown("---")
     
     # 주의사항
-    st.header("⚠️ 중요 안내")
-    
     st.warning("""
     ### 🚨 의료 면책 조항
     
@@ -277,37 +239,6 @@ if page == "📖 서비스 소개":
     
     **반드시 전문의 진료를 받으세요!**
     """)
-    
-    st.markdown("---")
-    
-    # 기술 스택
-    st.header("🛠️ 기술 스택")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown("""
-        **Deep Learning**
-        - TensorFlow 2.15
-        - Keras
-        - ResNet50
-        """)
-    
-    with col2:
-        st.markdown("""
-        **Data Processing**
-        - OpenCV
-        - NumPy
-        - Pandas
-        """)
-    
-    with col3:
-        st.markdown("""
-        **Dashboard**
-        - Streamlit
-        - Pillow
-        - Matplotlib
-        """)
     
     st.markdown("---")
     st.success("💡 **다음 단계:** 좌측 메뉴에서 '🩺 AI 예측'을 선택하여 실제 예측을 시도해보세요!")
@@ -335,11 +266,10 @@ elif page == "🩺 AI 예측":
     # 사용 안내
     st.info("""
     **💡 사용 방법:**
-    1. 샘플 이미지 4장을 업로드하세요 (양성 2장, 악성 2장)
+    1. 피부 병변 이미지를 업로드하세요 (최대 4장)
     2. AI가 각 이미지를 분석합니다
-    3. 예측 결과와 정답을 비교 확인하세요
-    
-    **📌 샘플 이미지:** `streamlit_samples/` 폴더에 4장이 준비되어 있습니다
+    3. 예측 결과를 확인하세요
+    4. CSV 파일로 결과를 다운로드할 수 있습니다
     """)
     
     # 이미지 업로드
@@ -386,15 +316,15 @@ elif page == "🩺 AI 예측":
                 if prediction > 0.5:
                     label = "Malignant"
                     color = "🔴"
-                    confidence = float(prediction * 100)  # float 변환!
+                    confidence = float(prediction * 100)
                 else:
                     label = "Benign"
                     color = "🟢"
-                    confidence = float((1 - prediction) * 100)  # float 변환!
+                    confidence = float((1 - prediction) * 100)
                 
                 st.markdown(f"### {color} {label}")
                 st.metric("확률", f"{confidence:.1f}%")
-                st.progress(confidence / 100)  # 이제 작동!
+                st.progress(confidence / 100)
                 
                 # 파일명에서 정답 추출
                 filename = uploaded_file.name.lower()
@@ -457,7 +387,7 @@ elif page == "🩺 AI 예측":
             st.info("👍 괜찮은 성능입니다!")
         else:
             st.warning("⚠️ 더 많은 테스트가 필요합니다")
-    
+        
         # CSV 다운로드
         st.markdown("---")
         st.header("💾 결과 다운로드")
