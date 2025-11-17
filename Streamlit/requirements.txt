@@ -7,3 +7,4 @@ numpy==1.24.3
 gdown==4.7.1
 protobuf==3.20.3
 h5py==3.9.0
+requests==2.31.0
