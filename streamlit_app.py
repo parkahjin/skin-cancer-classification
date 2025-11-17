@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════
-# 🌐 피부암 분류 AI - Streamlit Cloud 배포용 (다운로드 수정)
+# 🌐 피부암 분류 AI - Google Drive 최종 버전
 # ═══════════════════════════════════════════════════════════
 
 import streamlit as st
@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 import os
 import gdown
-import requests
 from pathlib import Path
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -24,101 +23,86 @@ st.set_page_config(
 )
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Google Drive에서 모델 다운로드 (개선된 버전)
+# Google Drive에서 모델 다운로드 (수정됨)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-def download_file_from_google_drive(file_id, destination):
-    """Google Drive에서 파일 다운로드 (requests 사용)"""
-    
-    # Google Drive 다운로드 URL
-    URL = "https://drive.google.com/uc?export=download"
-    
-    session = requests.Session()
-    
-    response = session.get(URL, params={'id': file_id}, stream=True)
-    token = None
-    
-    # 바이러스 스캔 경고 처리
-    for key, value in response.cookies.items():
-        if key.startswith('download_warning'):
-            token = value
-            break
-    
-    if token:
-        params = {'id': file_id, 'confirm': token}
-        response = session.get(URL, params=params, stream=True)
-    
-    # 파일 저장
-    CHUNK_SIZE = 32768
-    with open(destination, "wb") as f:
-        for chunk in response.iter_content(CHUNK_SIZE):
-            if chunk:
-                f.write(chunk)
-    
-    return destination
 
 @st.cache_resource
 def download_model_from_gdrive():
     """Google Drive에서 모델 다운로드 (최초 1회만)"""
     
     # 절대 경로 사용
-    model_dir = Path('/tmp')
-    model_path = model_dir / 'final_model_resnet50.keras'
+    model_path = Path('/tmp/final_model_resnet50.keras')
     
     # 이미 존재하면 스킵
     if model_path.exists():
         file_size = model_path.stat().st_size / (1024 * 1024)  # MB
-        st.info(f'✅ 캐시된 모델 사용: {file_size:.1f} MB')
-        return str(model_path)
+        if file_size > 10:  # 10MB 이상이면 유효
+            st.info(f'✅ 캐시된 모델 사용: {file_size:.1f} MB')
+            return str(model_path)
+        else:
+            # 잘못된 파일 삭제
+            model_path.unlink()
     
-    # Google Drive 파일 ID
-    gdrive_file_id = '13RsivlToes33FwGINH-CATCPT9lUbudL'
+    # Google Drive 전체 URL 사용 (fuzzy=True)
+    gdrive_url = 'https://drive.google.com/file/d/13RsivlToes33FwGINH-CATCPT9lUbudL/view?usp=sharing'
     
-    # 다운로드 시도
-    with st.spinner('🔄 AI 모델 다운로드 중... (최초 1회, 약 1-2분 소요)'):
+    # 다운로드
+    with st.spinner('🔄 AI 모델 다운로드 중... (최초 1회, 약 2-3분 소요)'):
         try:
-            # 방법 1: requests 직접 다운로드 (추천)
-            st.info('📥 다운로드 시작...')
-            download_file_from_google_drive(gdrive_file_id, str(model_path))
+            # fuzzy=True: Google Drive 공유 링크 자동 처리
+            st.info('📥 다운로드 시작... (큰 파일이라 시간이 걸립니다)')
+            
+            output = gdown.download(
+                gdrive_url, 
+                str(model_path), 
+                quiet=False,
+                fuzzy=True  # ⭐ 중요!
+            )
             
             # 다운로드 확인
             if not model_path.exists():
-                raise FileNotFoundError(f"다운로드 실패: {model_path}")
+                raise FileNotFoundError(f"다운로드 실패: 파일이 생성되지 않음")
             
             file_size = model_path.stat().st_size / (1024 * 1024)  # MB
             
-            # 파일 크기 확인 (너무 작으면 에러 페이지 다운받은 것)
+            # 파일 크기 검증
             if file_size < 10:
-                raise ValueError(f"파일 크기가 너무 작습니다: {file_size:.1f} MB")
+                raise ValueError(f"파일 크기 이상: {file_size:.1f} MB (예상: 80-100 MB)")
             
             st.success(f'✅ 모델 다운로드 완료! ({file_size:.1f} MB)')
             
-        except Exception as e1:
-            st.warning(f'⚠️ requests 다운로드 실패: {e1}')
-            st.info('🔄 gdown으로 재시도...')
+        except Exception as e:
+            st.error(f'❌ 다운로드 실패: {e}')
             
-            try:
-                # 방법 2: gdown fallback
-                gdrive_url = f'https://drive.google.com/uc?id={gdrive_file_id}'
-                gdown.download(gdrive_url, str(model_path), quiet=False, fuzzy=True)
-                
-                if not model_path.exists():
-                    raise FileNotFoundError("gdown 다운로드 실패")
-                
+            # 상세 정보
+            if model_path.exists():
                 file_size = model_path.stat().st_size / (1024 * 1024)
-                st.success(f'✅ 모델 다운로드 완료! ({file_size:.1f} MB)')
+                st.error(f"다운로드된 파일 크기: {file_size:.1f} MB")
                 
-            except Exception as e2:
-                st.error(f'❌ 모든 다운로드 방법 실패')
-                st.error(f'Error 1 (requests): {e1}')
-                st.error(f'Error 2 (gdown): {e2}')
-                st.info("""
-                **해결 방법:**
-                1. Google Drive 링크 확인: https://drive.google.com/file/d/13RsivlToes33FwGINH-CATCPT9lUbudL/view
-                2. 공유 설정: "링크가 있는 모든 사용자"
-                3. 잠시 후 페이지 새로고침 (F5)
-                """)
-                st.stop()
+                # HTML 에러 페이지인지 확인
+                with open(model_path, 'rb') as f:
+                    first_bytes = f.read(100)
+                    if b'<!DOCTYPE' in first_bytes or b'<html' in first_bytes:
+                        st.error("❌ HTML 페이지를 다운받았습니다 (실제 파일 아님)")
+            
+            st.info("""
+            **문제 해결:**
+            
+            1. **Google Drive 링크 재확인:**
+               - https://drive.google.com/file/d/13RsivlToes33FwGINH-CATCPT9lUbudL/view
+               - 이 링크를 브라우저에서 열어보세요
+               - 로그인 없이 다운로드되나요?
+            
+            2. **공유 설정 확인:**
+               - Google Drive에서 파일 우클릭
+               - "공유" → "링크가 있는 모든 사용자"
+               - 권한: "뷰어"
+            
+            3. **다른 방법:**
+               - Streamlit Cloud 로그 확인
+               - 5분 후 페이지 새로고침
+            """)
+            st.stop()
     
     return str(model_path)
 
@@ -132,12 +116,19 @@ def load_model():
     model_path = download_model_from_gdrive()
     
     try:
-        st.info(f'📂 모델 로드 중: {model_path}')
+        st.info(f'📂 모델 로드 중...')
         model = tf.keras.models.load_model(model_path)
         st.success('✅ 모델 로드 성공!')
         return model
     except Exception as e:
         st.error(f"❌ 모델 로드 실패: {e}")
+        st.error(f"경로: {model_path}")
+        
+        # 파일 정보 출력
+        if os.path.exists(model_path):
+            size = os.path.getsize(model_path)
+            st.error(f"파일 크기: {size / (1024*1024):.1f} MB")
+        
         st.stop()
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
