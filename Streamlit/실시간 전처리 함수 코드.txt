@@ -1,0 +1,34 @@
+# Streamlit 앱에서 사용할 코드 (나중에)
+
+import cv2
+import numpy as np
+import streamlit as st
+
+def preprocess_image(img_path, img_size=104):
+    """
+    학습 시와 동일한 전처리 파이프라인
+    """
+    # 1. 이미지 로드 (Grayscale)
+    img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
+    
+    # 2. CLAHE 적용
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    img = clahe.apply(img)
+    
+    # 3. Resize
+    img = cv2.resize(img, (img_size, img_size), interpolation=cv2.INTER_AREA)
+    
+    # 4. RGB 변환
+    img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+    
+    # 5. Normalization
+    img = img.astype(np.float32) / 255.0
+    
+    return img
+
+# 샘플 이미지 테스트
+sample_img_path = 'normal_sample_1.png'
+preprocessed = preprocess_image(sample_img_path, img_size=104)
+
+# 모델 예측
+prediction = model.predict(np.expand_dims(preprocessed, axis=0))

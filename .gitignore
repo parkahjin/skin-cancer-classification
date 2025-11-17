@@ -1,0 +1,68 @@
+# 대용량 파일 (Google Drive에 별도 저장)
+*.keras
+*.npz
+*.h5
+*.onnx
+
+# 임시 파일
+temp_*.jpg
+temp_*.png
+
+# Python 캐시
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# 빌드 파일
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# 가상환경
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE 설정
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 환경 변수
+.env
+.env.local
+.env.*.local
+
+# 개발 도구
+.claude/
+
+# OS 파일
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
