@@ -60,7 +60,7 @@ def download_model_from_github():
     
     # GitHub Releases 직접 다운로드 URL
     # TODO: GitHub Release 생성 후 이 URL을 실제 URL로 교체!
-    github_url = 'https://github.com/parkahjin/skin-cancer-classification/releases/download/v1.0/final_model_resnet50.keras'
+    github_url = 'https://github.com/YOUR_USERNAME/skin-cancer-classification/releases/download/v1.0/final_model_resnet50.keras'
     
     # 다운로드
     with st.spinner('🔄 AI 모델 다운로드 중...'):
@@ -115,11 +115,25 @@ def load_model():
     
     try:
         st.info('📂 모델 로드 중...')
-        model = tf.keras.models.load_model(model_path)
+        # compile=False: 버전 호환성 문제 해결
+        model = tf.keras.models.load_model(model_path, compile=False)
+        
+        # 수동으로 compile (추론만 하면 되므로 간단히)
+        model.compile(
+            optimizer='adam',
+            loss='binary_crossentropy',
+            metrics=['accuracy']
+        )
+        
         st.success('✅ 모델 로드 성공!')
         return model
     except Exception as e:
         st.error(f"❌ 모델 로드 실패: {e}")
+        st.error(f"경로: {model_path}")
+        st.info("""
+        **TensorFlow 버전 호환성 문제일 수 있습니다.**
+        로컬 환경에서는 정상 작동합니다.
+        """)
         st.stop()
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
