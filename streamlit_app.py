@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════
-# 🌐 피부암 분류 AI - Google Drive 최종 버전
+# 🌐 피부암 분류 AI - GitHub Releases 버전 (최종)
 # ═══════════════════════════════════════════════════════════
 
 import streamlit as st
@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 import pandas as pd
 import os
-import gdown
+import urllib.request
 from pathlib import Path
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -23,84 +23,82 @@ st.set_page_config(
 )
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Google Drive에서 모델 다운로드 (수정됨)
+# GitHub Releases에서 모델 다운로드
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-@st.cache_resource
-def download_model_from_gdrive():
-    """Google Drive에서 모델 다운로드 (최초 1회만)"""
+def download_with_progress(url, dest):
+    """진행률 표시하며 다운로드"""
     
-    # 절대 경로 사용
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    def report_progress(block_num, block_size, total_size):
+        downloaded = block_num * block_size
+        percent = min(100, int(downloaded * 100 / total_size))
+        progress_bar.progress(percent / 100)
+        status_text.text(f"다운로드 중: {downloaded/(1024*1024):.1f}MB / {total_size/(1024*1024):.1f}MB ({percent}%)")
+    
+    urllib.request.urlretrieve(url, dest, reporthook=report_progress)
+    
+    progress_bar.empty()
+    status_text.empty()
+
+@st.cache_resource
+def download_model_from_github():
+    """GitHub Releases에서 모델 다운로드 (최초 1회만)"""
+    
     model_path = Path('/tmp/final_model_resnet50.keras')
     
     # 이미 존재하면 스킵
     if model_path.exists():
-        file_size = model_path.stat().st_size / (1024 * 1024)  # MB
-        if file_size > 10:  # 10MB 이상이면 유효
+        file_size = model_path.stat().st_size / (1024 * 1024)
+        if file_size > 10:
             st.info(f'✅ 캐시된 모델 사용: {file_size:.1f} MB')
             return str(model_path)
         else:
-            # 잘못된 파일 삭제
             model_path.unlink()
     
-    # Google Drive 전체 URL 사용 (fuzzy=True)
-    gdrive_url = 'https://drive.google.com/file/d/13RsivlToes33FwGINH-CATCPT9lUbudL/view?usp=sharing'
+    # GitHub Releases 직접 다운로드 URL
+    # TODO: GitHub Release 생성 후 이 URL을 실제 URL로 교체!
+    github_url = 'https://github.com/parkahjin/skin-cancer-classification/releases/download/v1.0/final_model_resnet50.keras'
     
     # 다운로드
-    with st.spinner('🔄 AI 모델 다운로드 중... (최초 1회, 약 2-3분 소요)'):
+    with st.spinner('🔄 AI 모델 다운로드 중...'):
         try:
-            # fuzzy=True: Google Drive 공유 링크 자동 처리
-            st.info('📥 다운로드 시작... (큰 파일이라 시간이 걸립니다)')
+            st.info(f'📥 다운로드 시작: {github_url}')
             
-            output = gdown.download(
-                gdrive_url, 
-                str(model_path), 
-                quiet=False,
-                fuzzy=True  # ⭐ 중요!
-            )
+            download_with_progress(github_url, str(model_path))
             
-            # 다운로드 확인
+            # 확인
             if not model_path.exists():
-                raise FileNotFoundError(f"다운로드 실패: 파일이 생성되지 않음")
+                raise FileNotFoundError("다운로드 실패")
             
-            file_size = model_path.stat().st_size / (1024 * 1024)  # MB
+            file_size = model_path.stat().st_size / (1024 * 1024)
             
-            # 파일 크기 검증
             if file_size < 10:
-                raise ValueError(f"파일 크기 이상: {file_size:.1f} MB (예상: 80-100 MB)")
+                raise ValueError(f"파일 크기 이상: {file_size:.1f} MB")
             
             st.success(f'✅ 모델 다운로드 완료! ({file_size:.1f} MB)')
             
+        except urllib.error.HTTPError as e:
+            st.error(f'❌ HTTP 에러: {e.code} - {e.reason}')
+            if e.code == 404:
+                st.error("GitHub Release에 파일이 없습니다!")
+                st.info("""
+                **해결 방법:**
+                1. GitHub 레포지토리 → Releases
+                2. 모델 파일이 업로드되어 있는지 확인
+                3. 파일 링크를 코드에 정확히 입력했는지 확인
+                """)
+            st.stop()
+            
         except Exception as e:
             st.error(f'❌ 다운로드 실패: {e}')
-            
-            # 상세 정보
-            if model_path.exists():
-                file_size = model_path.stat().st_size / (1024 * 1024)
-                st.error(f"다운로드된 파일 크기: {file_size:.1f} MB")
-                
-                # HTML 에러 페이지인지 확인
-                with open(model_path, 'rb') as f:
-                    first_bytes = f.read(100)
-                    if b'<!DOCTYPE' in first_bytes or b'<html' in first_bytes:
-                        st.error("❌ HTML 페이지를 다운받았습니다 (실제 파일 아님)")
-            
             st.info("""
             **문제 해결:**
-            
-            1. **Google Drive 링크 재확인:**
-               - https://drive.google.com/file/d/13RsivlToes33FwGINH-CATCPT9lUbudL/view
-               - 이 링크를 브라우저에서 열어보세요
-               - 로그인 없이 다운로드되나요?
-            
-            2. **공유 설정 확인:**
-               - Google Drive에서 파일 우클릭
-               - "공유" → "링크가 있는 모든 사용자"
-               - 권한: "뷰어"
-            
-            3. **다른 방법:**
-               - Streamlit Cloud 로그 확인
-               - 5분 후 페이지 새로고침
+            1. GitHub Release 생성 확인
+            2. 모델 파일 업로드 확인
+            3. 파일 URL 확인
             """)
             st.stop()
     
@@ -113,22 +111,15 @@ def download_model_from_gdrive():
 @st.cache_resource
 def load_model():
     """모델 로드"""
-    model_path = download_model_from_gdrive()
+    model_path = download_model_from_github()
     
     try:
-        st.info(f'📂 모델 로드 중...')
+        st.info('📂 모델 로드 중...')
         model = tf.keras.models.load_model(model_path)
         st.success('✅ 모델 로드 성공!')
         return model
     except Exception as e:
         st.error(f"❌ 모델 로드 실패: {e}")
-        st.error(f"경로: {model_path}")
-        
-        # 파일 정보 출력
-        if os.path.exists(model_path):
-            size = os.path.getsize(model_path)
-            st.error(f"파일 크기: {size / (1024*1024):.1f} MB")
-        
         st.stop()
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
