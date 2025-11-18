@@ -60,7 +60,7 @@ def download_model_from_github():
     
     # GitHub Releases 직접 다운로드 URL
     # TODO: GitHub Release 생성 후 이 URL을 실제 URL로 교체!
-    github_url = 'https://github.com/parkahjin/skin-cancer-classification/releases/download/v1.0/final_model_resnet50.h5'
+    github_url = 'https://github.com/parkahjin/skin-cancer-classification/releases/download/v1.0/final_model_resnet50.keras'
     
     # 다운로드
     with st.spinner('🔄 AI 모델 다운로드 중...'):
